@@ -3,14 +3,12 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"github.com/gorilla/mux"
+	"github.com/lib/pq"
+	"github.com/subosito/gotenv"
 	"log"
 	"net/http"
 	"os"
-
-	"github.com/lib/pq"
-	"github.com/subosito/gotenv"
-
-	"github.com/gorilla/mux"
 )
 
 type Book struct {
@@ -84,7 +82,8 @@ func getBook(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 
 	// get it from the database.
-	rows := db.QueryRow("select * from books where id=?", params["id"])
+	rows := db.QueryRow("select * from books where id =" + params["id"])
+
 	err := rows.Scan(&book.ID, &book.Title, &book.Author, &book.Year)
 	logFatalError(err)
 	json.NewEncoder(w).Encode(&book)
@@ -92,15 +91,53 @@ func getBook(w http.ResponseWriter, r *http.Request) {
 
 func addBook(w http.ResponseWriter, r *http.Request) {
 	// Adding the book model to the database.
+	var book Book
+	var bookId int
+	json.NewDecoder(r.Body).Decode(&book)
 
+	// Insert to the database.
+	err := db.QueryRow("INSERT INTO books (title, author, year) VALUES ($1, $2, $3) RETURNING id;", book.Title, book.Author, book.Year).Scan(&bookId)
 
+	logFatalError(err)
+
+	json.NewEncoder(w).Encode(&bookId)
 
 }
 
 func updateBook(w http.ResponseWriter, r *http.Request) {
+	var book Book
+
+	json.NewDecoder(r.Body).Decode(&book)
+
+	// database query
+
+	result, err := db.Exec("UPDATE books set title=$1, author=$2, year=$3 WHERE id=$4 RETURNING id", &book.Title, &book.Author, &book.Year, &book.ID)
+
+	logFatalError(err)
+
+	rowsAffected, err := result.RowsAffected()
+
+	logFatalError(err)
+
+	json.NewEncoder(w).Encode(rowsAffected)
 
 }
 
 func deleteBook(w http.ResponseWriter, r *http.Request) {
+
+	// get the id from the request
+	params := mux.Vars(r)
+
+
+	result, err := db.Exec("DELETE FROM books WHERE id=$1", params["id"])
+	logFatalError(err)
+
+
+	rowsAffected, err := result.RowsAffected()
+
+
+	logFatalError(err)
+
+	json.NewEncoder(w).Encode(rowsAffected)
 
 }
